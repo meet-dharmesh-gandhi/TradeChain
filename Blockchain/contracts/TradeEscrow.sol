@@ -29,6 +29,9 @@ enum Role {
 struct Trade {
     address importer;
     address exporter;
+    address importCustoms;
+    address exportCustoms;
+    address shipper;
     uint256 amount;
     TradeState tradeState;
 }
@@ -36,6 +39,11 @@ struct Trade {
 contract TradeChain is ReentrancyGuard, Ownable {
     mapping (uint256 => Trade) public trades;
     mapping (address => Role) public roles;
+    mapping (address => uint256[]) tradeByImporters;
+    mapping (address => uint256[]) tradeByExporters;
+    mapping (address => uint256[]) tradeByImportCustoms;
+    mapping (address => uint256[]) tradeByExportCustoms;
+    mapping (address => uint256[]) tradeByShipper;
     uint256 internal nextTradeId = 0;
 
     event TradeCreated(uint256 indexed tradeId, address indexed importer, address indexed exporter);
@@ -89,12 +97,39 @@ contract TradeChain is ReentrancyGuard, Ownable {
         require(roles[shipper] == Role.SHIPPER, "Must be a shipper");
     }
 
+    function addImporter(uint256 tradeId, address importer) internal {
+        tradeByImporters[importer].push(tradeId);
+    }
+
+    function addExporter(uint256 tradeId, address exporter) internal {
+        tradeByExporters[exporter].push(tradeId);
+    }
+
+    function addImportCustoms(uint256 tradeId, address importCustoms) internal {
+        trades[tradeId].importCustoms = importCustoms;
+        tradeByImportCustoms[importCustoms].push(tradeId);
+    }
+
+    function addExportCustoms(uint256 tradeId, address exportCustoms) internal {
+        trades[tradeId].exportCustoms = exportCustoms;
+        tradeByExportCustoms[exportCustoms].push(tradeId);
+    }
+
+    function addShipper(uint256 tradeId, address shipper) internal {
+        trades[tradeId].shipper = shipper;
+        tradeByShipper[shipper].push(tradeId);
+    }
+
     function createTrade(address exporter, uint256 price) public {
         require(exporter != address(0), "Invalid exporter address");
 
-        Trade memory newTrade = Trade(msg.sender, exporter, price, TradeState.CREATED);
+        Trade memory newTrade = Trade(msg.sender, exporter, address(0), address(0), address(0), price, TradeState.CREATED);
         trades[nextTradeId] = newTrade;
+        addImporter(nextTradeId, msg.sender);
+        addExporter(nextTradeId, exporter);
+
         emit TradeCreated(nextTradeId, msg.sender, exporter);
+
         nextTradeId++;
     }
 
@@ -137,6 +172,7 @@ contract TradeChain is ReentrancyGuard, Ownable {
             // this means that this should be the export customs
             verifyExportCustoms(msg.sender);
 
+            addExportCustoms(tradeId, msg.sender);
             setTradeState(tradeId, TradeState.EXPORT_CUSTOMS_RECEIVED);
 
             emit ExportCustomsReceived(tradeId, msg.sender);
@@ -144,6 +180,7 @@ contract TradeChain is ReentrancyGuard, Ownable {
             // this means that this should be the import customs
             verifyImportCustoms(msg.sender);
 
+            addImportCustoms(tradeId, msg.sender);
             setTradeState(tradeId, TradeState.IMPORT_CUSTOMS_RECEIVED);
 
             emit ImportCustomsReceived(tradeId, msg.sender);
@@ -179,6 +216,7 @@ contract TradeChain is ReentrancyGuard, Ownable {
         verifyShipper(msg.sender);
         verifyLastStageReached(tradeId, TradeState.EXPORT_CUSTOMS_APPROVED);
 
+        addShipper(tradeId, msg.sender);
         setTradeState(tradeId, TradeState.SHIPMENT_SENT);
 
         emit ShipmentSent(tradeId, msg.sender);
@@ -248,5 +286,25 @@ contract TradeChain is ReentrancyGuard, Ownable {
 
     function removeRole(address role) external onlyOwner {
         delete roles[role];
+    }
+
+    function getTradesAsImporter() public view returns (uint256[] memory) {
+        return tradeByImporters[msg.sender];
+    }
+
+    function getTradesAsExporter() public view returns (uint256[] memory) {
+        return tradeByExporters[msg.sender];
+    }
+
+    function getTradesAsImportCustoms() public view returns (uint256[] memory) {
+        return tradeByImportCustoms[msg.sender];
+    }
+
+    function getTradesAsExportCustoms() public view returns (uint256[] memory) {
+        return tradeByExportCustoms[msg.sender];
+    }
+
+    function getTradesAsShipper() public view returns (uint256[] memory) {
+        return tradeByShipper[msg.sender];
     }
 }
