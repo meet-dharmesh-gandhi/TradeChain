@@ -39,11 +39,6 @@ struct Trade {
 contract TradeChain is ReentrancyGuard, Ownable {
     mapping (uint256 => Trade) public trades;
     mapping (address => Role) public roles;
-    mapping (address => uint256[]) tradeByImporters;
-    mapping (address => uint256[]) tradeByExporters;
-    mapping (address => uint256[]) tradeByImportCustoms;
-    mapping (address => uint256[]) tradeByExportCustoms;
-    mapping (address => uint256[]) tradeByShipper;
     uint256 internal nextTradeId = 0;
 
     event TradeCreated(uint256 indexed tradeId, address indexed importer, address indexed exporter);
@@ -286,25 +281,5 @@ contract TradeChain is ReentrancyGuard, Ownable {
 
     function removeRole(address role) external onlyOwner {
         delete roles[role];
-    }
-
-    function getTradesAsImporter() public view returns (uint256[] memory) {
-        return tradeByImporters[msg.sender];
-    }
-
-    function getTradesAsExporter() public view returns (uint256[] memory) {
-        return tradeByExporters[msg.sender];
-    }
-
-    function getTradesAsImportCustoms() public view returns (uint256[] memory) {
-        return tradeByImportCustoms[msg.sender];
-    }
-
-    function getTradesAsExportCustoms() public view returns (uint256[] memory) {
-        return tradeByExportCustoms[msg.sender];
-    }
-
-    function getTradesAsShipper() public view returns (uint256[] memory) {
-        return tradeByShipper[msg.sender];
     }
 }
