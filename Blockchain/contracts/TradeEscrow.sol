@@ -53,6 +53,8 @@ contract TradeChain is ReentrancyGuard, Ownable {
     event ImportCustomsApproved(uint256 indexed tradeId, address importCustoms);
     event Completed(uint256 indexed tradeId, address indexed importer, address indexed exporter);
     event Disputed(uint256 indexed tradeId, address disputer);
+    event RoleAdded(address roleWallet, string role);
+    event RoleRemoved(address roleWallet, string role);
 
     error InvalidState();
     error UnAuthorized();
@@ -256,17 +258,27 @@ contract TradeChain is ReentrancyGuard, Ownable {
 
     function addExportCustoms(address customs) external onlyOwner {
         roles[customs] = Role.EXPORT_CUSTOM;
+        emit RoleAdded(customs, "EXPORT_CUSTOM");
     }
 
     function addImportCustoms(address customs) external onlyOwner {
         roles[customs] = Role.IMPORT_CUSTOM;
+        emit RoleAdded(customs, "IMPORT_CUSTOM");
     }
 
     function addShipper(address shipper) external onlyOwner {
         roles[shipper] = Role.SHIPPER;
+        emit RoleAdded(shipper, "SHIPPER");
     }
 
     function removeRole(address role) external onlyOwner {
+        if (roles[role] == Role.EXPORT_CUSTOM) {
+            emit RoleRemoved(role, "EXPORT_CUSTOM");
+        } else if (roles[role] == Role.IMPORT_CUSTOM) {
+            emit RoleRemoved(role, "IMPORT_CUSTOM");
+        } else if (roles[role] == Role.SHIPPER) {
+            emit RoleRemoved(role, "SHIPPER");
+        }
         delete roles[role];
     }
 }
