@@ -92,27 +92,16 @@ contract TradeChain is ReentrancyGuard, Ownable {
         require(roles[shipper] == Role.SHIPPER, "Must be a shipper");
     }
 
-    function addImporter(uint256 tradeId, address importer) internal {
-        tradeByImporters[importer].push(tradeId);
-    }
-
-    function addExporter(uint256 tradeId, address exporter) internal {
-        tradeByExporters[exporter].push(tradeId);
-    }
-
     function addImportCustoms(uint256 tradeId, address importCustoms) internal {
         trades[tradeId].importCustoms = importCustoms;
-        tradeByImportCustoms[importCustoms].push(tradeId);
     }
 
     function addExportCustoms(uint256 tradeId, address exportCustoms) internal {
         trades[tradeId].exportCustoms = exportCustoms;
-        tradeByExportCustoms[exportCustoms].push(tradeId);
     }
 
     function addShipper(uint256 tradeId, address shipper) internal {
         trades[tradeId].shipper = shipper;
-        tradeByShipper[shipper].push(tradeId);
     }
 
     function createTrade(address exporter, uint256 price) public {
@@ -120,8 +109,6 @@ contract TradeChain is ReentrancyGuard, Ownable {
 
         Trade memory newTrade = Trade(msg.sender, exporter, address(0), address(0), address(0), price, TradeState.CREATED);
         trades[nextTradeId] = newTrade;
-        addImporter(nextTradeId, msg.sender);
-        addExporter(nextTradeId, exporter);
 
         emit TradeCreated(nextTradeId, msg.sender, exporter);
 
