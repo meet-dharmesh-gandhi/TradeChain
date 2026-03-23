@@ -244,6 +244,7 @@ const eventHandlers = {
 };
 
 async function processTradeEvent(eventName, args, eventPayload) {
+	console.log("creating trade:", eventName, args, eventPayload);
 	const handler = eventHandlers[eventName];
 	if (!handler) {
 		return;

@@ -14,27 +14,39 @@ function parseEnvFile(filePath) {
 	return dotenv.parse(content);
 }
 
+function parseJsonFile(filePath) {
+	if (!fs.existsSync(filePath)) {
+		return null;
+	}
+
+	try {
+		const content = fs.readFileSync(filePath, "utf8");
+		return JSON.parse(content);
+	} catch {
+		return null;
+	}
+}
+
 function loadConfig() {
-	const frontendEnvPath = path.resolve(
+	const runtimeConfigPath = path.resolve(
 		__dirname,
 		"..",
-		process.env.FRONTEND_ENV_PATH || "../frontend/.env.local",
+		process.env.RUNTIME_CONFIG_PATH || "../backend/config/contract-runtime.json",
 	);
+	const runtimeConfig = parseJsonFile(runtimeConfigPath) || {};
 
-	const frontendEnv = parseEnvFile(frontendEnvPath);
-
-	const rpcUrl = process.env.RPC_URL || frontendEnv.NEXT_PUBLIC_RPC_URL;
-	const contractAddress =
-		process.env.CONTRACT_ADDRESS || frontendEnv.NEXT_PUBLIC_CONTRACT_ADDRESS;
+	const rpcUrl = process.env.RPC_URL || runtimeConfig.rpcUrl;
+	const contractAddress = process.env.CONTRACT_ADDRESS || runtimeConfig.contractAddress;
 
 	const config = {
 		port: Number.parseInt(process.env.PORT || "4000", 10),
 		pollingInterval: Number.parseInt(process.env.POLLING_INTERVAL || "1000", 10),
 		rpcUrl,
 		contractAddress,
+		contractAbi: runtimeConfig.abi,
+		runtimeConfigPath,
 		mongoUri: process.env.MONGODB_URI,
 		mongoDbName: process.env.MONGODB_DB_NAME || "tradechain",
-		frontendEnvPath,
 	};
 
 	const errors = [];
@@ -53,6 +65,12 @@ function loadConfig() {
 
 	if (config.contractAddress && !/^0x[a-fA-F0-9]{40}$/.test(config.contractAddress)) {
 		errors.push(`Invalid contract address format: ${config.contractAddress}`);
+	}
+
+	if (!Array.isArray(config.contractAbi) || config.contractAbi.length === 0) {
+		errors.push(
+			`Missing contract ABI. Run deploy script to generate runtime config at ${runtimeConfigPath}.`,
+		);
 	}
 
 	if (!config.mongoUri) {

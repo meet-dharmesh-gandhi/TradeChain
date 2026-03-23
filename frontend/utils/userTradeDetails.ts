@@ -1,45 +1,95 @@
-import { ethers } from "ethers";
-import { CONTRACT_ADDRESS, TradeChainABI } from "./blockchainDetails";
+import { getEnvConfig } from "@/config/env";
 
-export async function getOngoingTransactions(): Promise<Array<string>> {
-	const provider = new ethers.BrowserProvider(window.ethereum);
+export type TradeEntity =
+	| "importer"
+	| "exporter"
+	| "exportCustoms"
+	| "importCustoms"
+	| "shipper"
+	| "owner";
 
-	console.log(CONTRACT_ADDRESS());
-	const contract = new ethers.Contract(CONTRACT_ADDRESS(), TradeChainABI, provider);
-
-	console.log(await provider.getCode(CONTRACT_ADDRESS()));
-	console.log(await provider.getNetwork());
-	console.log("all contracts:", contract.interface.fragments);
-
-	const tx = await contract.getTradesAsImporter();
-
-	// await tx.wait();
-
-	console.log("Your ongoing transactions:", tx);
-
-	return [];
+export interface TradeRecord {
+	tradeId: string;
+	importer: string | null;
+	exporter: string | null;
+	importCustoms: string | null;
+	exportCustoms: string | null;
+	shipper: string | null;
+	agreedAmount: string | null;
+	depositedAmount: string | null;
+	status: string | null;
+	disputedBy: string | null;
+	lastEventName: string | null;
+	lastTxHash: string | null;
+	lastBlockNumber: number | null;
+	completedAt: string | null;
+	createdAt: string;
+	updatedAt: string;
 }
 
-export async function switchToHardhat() {
-	const params = {
-		chainId: "0x7a69",
-		chainName: "Hardhat Local",
-		nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
-		rpcUrls: ["http://127.0.0.1:8545"],
-		blockExplorerUrls: [],
-	};
-	try {
-		await window.ethereum.request({
-			method: "wallet_switchEthereumChain",
-			params: [{ chainId: params.chainId }],
-		});
-	} catch (switchError) {
-		// 4902 = unknown chain, ask to add it
-		if (switchError.code === 4902) {
-			await window.ethereum.request({ method: "wallet_addEthereumChain", params: [params] });
-		} else {
-			throw switchError;
-		}
+interface TradesApiResponse {
+	ok: boolean;
+	trades?: TradeRecord[];
+	error?: string;
+}
+
+const inFlightTradeRequests = new Map<string, Promise<TradeRecord[]>>();
+
+function shouldAttachAddress(entity: TradeEntity) {
+	return entity !== "owner" && entity !== "exportCustoms" && entity !== "importCustoms";
+}
+
+function getTradesApiUrl(entity: TradeEntity, accountAddress?: string) {
+	const config = getEnvConfig();
+	const url = new URL("/trades", config.backendUrl);
+	url.searchParams.set("entity", entity);
+
+	if (shouldAttachAddress(entity) && accountAddress) {
+		url.searchParams.set("address", accountAddress);
 	}
-	console.log("Switched/added Hardhat network");
+
+	return url.toString();
+}
+
+export async function getTradesForEntity(
+	entity: TradeEntity,
+	accountAddress?: string,
+): Promise<TradeRecord[]> {
+	if (shouldAttachAddress(entity) && !accountAddress) {
+		return [];
+	}
+
+	const requestUrl = getTradesApiUrl(entity, accountAddress);
+	if (inFlightTradeRequests.has(requestUrl)) {
+		return inFlightTradeRequests.get(requestUrl) as Promise<TradeRecord[]>;
+	}
+
+	const fetchPromise = (async () => {
+		const response = await fetch(requestUrl, {
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+			},
+			cache: "no-store",
+		});
+
+		const data = (await response.json()) as TradesApiResponse;
+		if (!response.ok || !data.ok) {
+			throw new Error(data.error || "Failed to fetch trades from backend");
+		}
+
+		return data.trades || [];
+	})();
+
+	inFlightTradeRequests.set(requestUrl, fetchPromise);
+	try {
+		return await fetchPromise;
+	} finally {
+		inFlightTradeRequests.delete(requestUrl);
+	}
+}
+
+export async function getOngoingTransactions(): Promise<Array<string>> {
+	const trades = await getTradesForEntity("importer");
+	return trades.map((trade) => trade.tradeId);
 }

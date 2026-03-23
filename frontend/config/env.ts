@@ -7,6 +7,7 @@ interface AppConfig {
 	// Contract Configuration
 	contractAddress: string;
 	networkId: string;
+	backendUrl: string;
 
 	// Network Configuration
 	rpcUrl: string;
@@ -96,6 +97,13 @@ class EnvironmentValidator {
 			throw new Error(`NEXT_PUBLIC_RPC_URL must be a valid URL, got: ${rpcUrl}`);
 		}
 
+		const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
+		try {
+			new URL(backendUrl);
+		} catch {
+			throw new Error(`NEXT_PUBLIC_BACKEND_URL must be a valid URL, got: ${backendUrl}`);
+		}
+
 		// Validate contract address format
 		const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
 		if (!contractAddress.startsWith("0x") || contractAddress.length !== 42) {
@@ -108,6 +116,7 @@ class EnvironmentValidator {
 			// Contract Configuration
 			contractAddress,
 			networkId,
+			backendUrl,
 
 			// Network Configuration
 			rpcUrl,
@@ -147,7 +156,7 @@ class EnvironmentValidator {
 		try {
 			this.getConfig();
 			return { isValid: true, errors: [] };
-		} catch (error) {
+		} catch {
 			return {
 				isValid: false,
 				errors: [error instanceof Error ? error.message : "Unknown validation error"],
@@ -163,11 +172,12 @@ class EnvironmentValidator {
 		try {
 			const config = this.getConfig();
 			return { ...config, isComplete: true };
-		} catch (error) {
+		} catch {
 			// Return partial config with available variables
 			return {
 				contractAddress: process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "",
 				networkId: process.env.NEXT_PUBLIC_NETWORK_ID || "",
+				backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000",
 				rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || "",
 				chainId: process.env.NEXT_PUBLIC_CHAIN_ID || "",
 				chainName: process.env.NEXT_PUBLIC_CHAIN_NAME || "",
@@ -192,7 +202,7 @@ export const getSafeEnvConfig = () => EnvironmentValidator.getSafeConfig();
 export const env = (() => {
 	try {
 		return EnvironmentValidator.getConfig();
-	} catch (error) {
+	} catch {
 		console.warn("Environment not fully loaded yet, using safe config");
 		return EnvironmentValidator.getSafeConfig() as AppConfig;
 	}

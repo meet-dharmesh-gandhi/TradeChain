@@ -19,11 +19,22 @@ async function main() {
 
 	const address = await tradeChain.getAddress();
 	console.log("TradeChain deployed to:", address);
+	const artifact = await hre.artifacts.readArtifact("TradeChain");
 
-	// Save the contract address to frontend environment file
+	// Save runtime files so frontend and backend share the same contract identity and ABI.
 	try {
 		const envPath = BlockchainEnv.createFrontendEnvFile(address);
+		const abiPath = BlockchainEnv.createFrontendAbiFile(artifact.abi);
+		const runtimeOutput = BlockchainEnv.createRuntimeConfigFiles({
+			contractAddress: address,
+			abi: artifact.abi,
+		});
+
 		console.log(`Environment variables saved to ${envPath}`);
+		console.log(`Frontend ABI synced to ${abiPath}`);
+		console.log(`Frontend runtime config saved to ${runtimeOutput.frontendRuntimePath}`);
+		console.log(`Backend runtime config saved to ${runtimeOutput.backendRuntimePath}`);
+		console.log(`Runtime ABI hash: ${runtimeOutput.runtimeConfig.abiHash}`);
 	} catch (error) {
 		console.error("Failed to create frontend environment file:", error.message);
 		process.exit(1);

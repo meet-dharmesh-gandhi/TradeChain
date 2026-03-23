@@ -1,22 +1,21 @@
 const { ethers } = require("ethers");
-const abi = require("../../Blockchain/artifacts/contracts/TradeEscrow.sol/TradeChain.json");
 const { processTradeEvent } = require("./services/tradeEventProcessor");
 
 function safeStringify(value) {
 	return JSON.stringify(
 		value,
 		(_, current) => (typeof current === "bigint" ? current.toString() : current),
-		2,
+		4,
 	);
 }
 
-function createTradeChainListener({ rpcUrl, contractAddress, pollingInterval = 1000 }) {
+function createTradeChainListener({ rpcUrl, contractAddress, abi, pollingInterval = 1000 }) {
 	const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
 		polling: true,
 		pollingInterval,
 	});
 
-	const contract = new ethers.Contract(contractAddress, abi.abi, provider);
+	const contract = new ethers.Contract(contractAddress, abi, provider);
 	const eventFragments = contract.interface.fragments.filter(
 		(fragment) => fragment.type === "event",
 	);
@@ -40,6 +39,8 @@ function createTradeChainListener({ rpcUrl, contractAddress, pollingInterval = 1
 	function start() {
 		for (const fragment of eventFragments) {
 			contract.on(fragment.name, async (...args) => {
+				console.log("start, on:");
+				console.log(safeStringify(args));
 				onAnyEvent(fragment.name, ...args);
 
 				const eventPayload = args[args.length - 1];

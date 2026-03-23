@@ -2,11 +2,74 @@ const express = require("express");
 const { loadConfig } = require("./config");
 const { createTradeChainListener } = require("./eventListener");
 const { connectToMongo, disconnectFromMongo } = require("./db");
+const Trade = require("./models/Trade");
 
 const config = loadConfig();
 const app = express();
 let listener;
 let server;
+
+const TERMINAL_STATUSES = new Set(["COMPLETED", "DISPUTED"]);
+const TRADE_ENTITY_FIELDS = {
+	importer: "importer",
+	exporter: "exporter",
+	exportCustoms: "exportCustoms",
+	importCustoms: "importCustoms",
+	shipper: "shipper",
+	owner: null,
+};
+
+function normalizeAddress(address) {
+	return typeof address === "string" ? address.toLowerCase() : "";
+}
+
+async function loadTradesForEntity({ entity, address, includeTerminal }) {
+	let trades = await Trade.find().lean();
+
+	if (!includeTerminal) {
+		trades = trades.filter((trade) => !TERMINAL_STATUSES.has(trade.status));
+	}
+
+	if (!entity || entity === "owner") {
+		return trades.sort((a, b) => Number(a.tradeId) - Number(b.tradeId));
+	}
+
+	if (entity === "exportCustoms" || entity === "importCustoms") {
+		return trades.sort((a, b) => Number(a.tradeId) - Number(b.tradeId));
+	}
+
+	const field = TRADE_ENTITY_FIELDS[entity];
+	if (!field) {
+		const error = new Error(`Unsupported entity: ${entity}`);
+		error.statusCode = 400;
+		throw error;
+	}
+
+	if (!address) {
+		const error = new Error(`Missing address for entity: ${entity}`);
+		error.statusCode = 400;
+		throw error;
+	}
+
+	const normalizedAddress = normalizeAddress(address);
+	return trades
+		.filter((trade) => normalizeAddress(trade[field]) === normalizedAddress)
+		.sort((a, b) => Number(a.tradeId) - Number(b.tradeId));
+}
+
+app.use(express.json());
+app.use((req, res, next) => {
+	res.header("Access-Control-Allow-Origin", "*");
+	res.header("Access-Control-Allow-Methods", "GET,OPTIONS");
+	res.header("Access-Control-Allow-Headers", "Content-Type");
+
+	if (req.method === "OPTIONS") {
+		res.sendStatus(204);
+		return;
+	}
+
+	next();
+});
 
 app.get("/health", async (_req, res) => {
 	try {
@@ -31,6 +94,48 @@ app.get("/health", async (_req, res) => {
 	}
 });
 
+app.get("/trades", async (req, res) => {
+	const entity = typeof req.query.entity === "string" ? req.query.entity : "";
+	const address = typeof req.query.address === "string" ? req.query.address : "";
+	const includeTerminal = req.query.includeTerminal === "true";
+
+	if (entity && !(entity in TRADE_ENTITY_FIELDS)) {
+		res.status(400).json({
+			ok: false,
+			error: `Invalid entity '${entity}'. Allowed values: ${Object.keys(TRADE_ENTITY_FIELDS).join(", ")}`,
+		});
+		return;
+	}
+
+	try {
+		const trades = await loadTradesForEntity({ entity, address, includeTerminal });
+		res.json({ ok: true, count: trades.length, trades });
+	} catch (error) {
+		res.status(error.statusCode || 500).json({
+			ok: false,
+			error: error instanceof Error ? error.message : "Failed to load trades",
+		});
+	}
+});
+
+app.get("/trades/:tradeId", async (req, res) => {
+	try {
+		const trade = await Trade.findOne({ tradeId: req.params.tradeId }).lean();
+
+		if (!trade) {
+			res.status(404).json({ ok: false, error: "Trade not found" });
+			return;
+		}
+
+		res.json({ ok: true, trade });
+	} catch (error) {
+		res.status(500).json({
+			ok: false,
+			error: error instanceof Error ? error.message : "Failed to load trade",
+		});
+	}
+});
+
 async function start() {
 	await connectToMongo({
 		mongoUri: config.mongoUri,
@@ -40,6 +145,7 @@ async function start() {
 	listener = createTradeChainListener({
 		rpcUrl: config.rpcUrl,
 		contractAddress: config.contractAddress,
+		abi: config.contractAbi,
 		pollingInterval: config.pollingInterval,
 	});
 

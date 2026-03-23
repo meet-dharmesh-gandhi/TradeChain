@@ -5,6 +5,7 @@
 
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 
 class BlockchainEnvironmentValidator {
 	static config = null;
@@ -32,6 +33,7 @@ class BlockchainEnvironmentValidator {
 
 			// Deployment Configuration
 			frontendPath: process.env.FRONTEND_PATH || "../frontend",
+			backendPath: process.env.BACKEND_PATH || "../backend",
 			envFileName: process.env.ENV_FILE_NAME || ".env.local",
 
 			// Development Configuration
@@ -94,9 +96,83 @@ class BlockchainEnvironmentValidator {
 		const config = this.getConfig();
 		return {
 			frontendPath: config.frontendPath,
+			backendPath: config.backendPath,
 			envFileName: config.envFileName,
 			chainId: config.chainId,
 		};
+	}
+
+	static writeJsonFile(filePath, data) {
+		const directory = path.dirname(filePath);
+		if (!fs.existsSync(directory)) {
+			fs.mkdirSync(directory, { recursive: true });
+		}
+
+		fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+	}
+
+	static getContractRuntimeConfig({ contractAddress, abi }) {
+		const deploymentConfig = this.getDeploymentConfig();
+		const networkConfig = this.getNetworkConfig();
+		const abiHash = crypto
+			.createHash("sha256")
+			.update(JSON.stringify(abi))
+			.digest("hex");
+
+		return {
+			contractName: "TradeChain",
+			contractAddress,
+			chainId: deploymentConfig.chainId,
+			rpcUrl: networkConfig.url,
+			abiHash,
+			abi,
+			generatedAt: new Date().toISOString(),
+		};
+	}
+
+	static createRuntimeConfigFiles({ contractAddress, abi }) {
+		const deploymentConfig = this.getDeploymentConfig();
+		const runtimeConfig = this.getContractRuntimeConfig({ contractAddress, abi });
+
+		const frontendRuntimePath = path.resolve(
+			__dirname,
+			"..",
+			deploymentConfig.frontendPath,
+			"config",
+			"contract-runtime.json",
+		);
+
+		const backendRuntimePath = path.resolve(
+			__dirname,
+			"..",
+			deploymentConfig.backendPath,
+			"config",
+			"contract-runtime.json",
+		);
+
+		this.writeJsonFile(frontendRuntimePath, runtimeConfig);
+		this.writeJsonFile(backendRuntimePath, runtimeConfig);
+
+		return {
+			frontendRuntimePath,
+			backendRuntimePath,
+			runtimeConfig,
+		};
+	}
+
+	static createFrontendAbiFile(abi) {
+		const deploymentConfig = this.getDeploymentConfig();
+		const abiPath = path.resolve(
+			__dirname,
+			"..",
+			deploymentConfig.frontendPath,
+			"utils",
+			"abi",
+			"TradeChain.json",
+		);
+
+		this.writeJsonFile(abiPath, abi);
+		return abiPath;
 	}
 
 	/**

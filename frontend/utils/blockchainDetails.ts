@@ -1,20 +1,10 @@
-import TradeChainJSON from "./abi/TradeChain.json";
 import { ethers } from "ethers";
-import { getEnvConfig } from "../config/env";
+import runtimeConfig from "@/config/contract-runtime.json";
 
-// Lazy load environment configuration
-let _config: ReturnType<typeof getEnvConfig> | null = null;
-function getConfig() {
-	if (!_config) {
-		_config = getEnvConfig();
-	}
-	return _config;
-}
+export const CONTRACT_ADDRESS = () => runtimeConfig.contractAddress;
+export const NETWORK_ID = () => runtimeConfig.chainId.toString();
 
-export const CONTRACT_ADDRESS = () => getConfig().contractAddress;
-export const NETWORK_ID = () => getConfig().networkId;
-
-export const TradeChainABI = TradeChainJSON;
+export const TradeChainABI = runtimeConfig.abi;
 
 export function getContract(signer: ethers.Signer) {
 	const contractAddress = CONTRACT_ADDRESS();
@@ -22,15 +12,18 @@ export function getContract(signer: ethers.Signer) {
 		throw new Error("Contract address not found. Please deploy the contract first.");
 	}
 
+	if (!Array.isArray(TradeChainABI) || TradeChainABI.length === 0) {
+		throw new Error("Contract ABI not found. Run deploy script to sync runtime config.");
+	}
+
 	return new ethers.Contract(contractAddress, TradeChainABI, signer);
 }
 
 export async function checkNetwork(provider: ethers.Provider) {
-	const config = getConfig();
 	const network = await provider.getNetwork();
-	if (network.chainId.toString() !== config.networkId) {
+	if (network.chainId.toString() !== NETWORK_ID()) {
 		throw new Error(
-			`Wrong network. Expected chain ID: ${config.networkId}, Current: ${network.chainId}`,
+			`Wrong network. Expected chain ID: ${NETWORK_ID()}, Current: ${network.chainId}`,
 		);
 	}
 	return network;

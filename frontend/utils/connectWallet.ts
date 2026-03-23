@@ -1,6 +1,14 @@
 import { ethers } from "ethers";
 import { getSafeEnvConfig } from "../config/env";
 
+function isKnownSwitchError(error: unknown): error is { code: number } {
+	if (typeof error !== "object" || error === null) {
+		return false;
+	}
+
+	return "code" in error && typeof (error as { code: unknown }).code === "number";
+}
+
 // Get network configuration from environment
 function getNetworkConfig() {
 	const config = getSafeEnvConfig();
@@ -48,9 +56,9 @@ export async function connectWallet() {
 					method: "wallet_switchEthereumChain",
 					params: [{ chainId: LOCALHOST_NETWORK.chainId }],
 				});
-			} catch (switchError: any) {
+			} catch (switchError: unknown) {
 				// Network not added, add it
-				if (switchError.code === 4902) {
+				if (isKnownSwitchError(switchError) && switchError.code === 4902) {
 					await window.ethereum.request({
 						method: "wallet_addEthereumChain",
 						params: [LOCALHOST_NETWORK],
