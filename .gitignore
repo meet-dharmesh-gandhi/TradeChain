@@ -43,3 +43,6 @@ cache
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# custom files
+*.ignore.*

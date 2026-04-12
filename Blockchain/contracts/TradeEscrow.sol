@@ -20,7 +20,6 @@ enum TradeState {
 }
 
 enum Role {
-    NONE,
     EXPORT_CUSTOM,
     IMPORT_CUSTOM,
     SHIPPER
