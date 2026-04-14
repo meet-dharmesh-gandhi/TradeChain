@@ -666,13 +666,12 @@ export default function Home() {
 							/>
 							Trade #{trade.tradeId} ({trade.status || "UNKNOWN"})
 							{Array.isArray(trade.arbitrators) && trade.arbitrators.length > 0 ? (
-								<span>
-									{" "}
-									| Arbitrators: {trade.arbitrators.length}
-								</span>
+								<span> | Arbitrators: {trade.arbitrators.length}</span>
 							) : null}
 							{Array.isArray(trade.arbitrators) && trade.arbitrators.length > 0 ? (
-								<div style={{ marginTop: "4px", fontSize: "12px", color: "#334155" }}>
+								<div
+									style={{ marginTop: "4px", fontSize: "12px", color: "#334155" }}
+								>
 									{trade.arbitrators.join(", ")}
 								</div>
 							) : null}
