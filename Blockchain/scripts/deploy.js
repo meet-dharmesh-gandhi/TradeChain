@@ -1,47 +1,90 @@
+const fs = require("fs");
+const path = require("path");
 const hre = require("hardhat");
-const BlockchainEnv = require("../config/env");
+
+function writeJsonFile(filePath, payload) {
+	fs.mkdirSync(path.dirname(filePath), { recursive: true });
+	fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
+}
+
+async function deployContract(contractName, constructorArgs = []) {
+	const factory = await hre.ethers.getContractFactory(contractName);
+	const contract = await factory.deploy(...constructorArgs);
+	await contract.waitForDeployment();
+	const address = await contract.getAddress();
+	console.log(`${contractName} deployed at ${address}`);
+	return { contract, address };
+}
 
 async function main() {
-	// Validate environment before deployment
-	const envValidation = BlockchainEnv.validateEnvironment();
-	if (!envValidation.isValid) {
-		console.error("Environment validation failed:");
-		envValidation.errors.forEach((error) => console.error(`- ${error}`));
-		process.exit(1);
+	console.log("Deploying TradeData...");
+	const { contract: tradeData, address: dataAddress } = await deployContract("TradeData");
+
+	console.log("Deploying TradeMoney...");
+	const { contract: tradeMoney, address: moneyAddress } = await deployContract("TradeMoney");
+
+	console.log("Deploying TradeLogic...");
+	const { contract: tradeLogic, address: logicAddress } = await deployContract("TradeLogic", [
+		dataAddress,
+		moneyAddress,
+	]);
+
+	if (typeof tradeData.addTradeLogic === "function") {
+		const tx = await tradeData.addTradeLogic(logicAddress);
+		await tx.wait();
+		console.log(`TradeData linked with TradeLogic (${logicAddress})`);
 	}
 
-	const TradeChain = await hre.ethers.getContractFactory("TradeChain");
-
-	console.log("Deploying TradeChain contract...");
-	const tradeChain = await TradeChain.deploy();
-
-	await tradeChain.waitForDeployment();
-
-	const address = await tradeChain.getAddress();
-	console.log("TradeChain deployed to:", address);
-	const artifact = await hre.artifacts.readArtifact("TradeChain");
-
-	// Save runtime files so frontend and backend share the same contract identity and ABI.
-	try {
-		const envPath = BlockchainEnv.createFrontendEnvFile(address);
-		const abiPath = BlockchainEnv.createFrontendAbiFile(artifact.abi);
-		const runtimeOutput = BlockchainEnv.createRuntimeConfigFiles({
-			contractAddress: address,
-			abi: artifact.abi,
-		});
-
-		console.log(`Environment variables saved to ${envPath}`);
-		console.log(`Frontend ABI synced to ${abiPath}`);
-		console.log(`Frontend runtime config saved to ${runtimeOutput.frontendRuntimePath}`);
-		console.log(`Backend runtime config saved to ${runtimeOutput.backendRuntimePath}`);
-		console.log(`Runtime ABI hash: ${runtimeOutput.runtimeConfig.abiHash}`);
-	} catch (error) {
-		console.error("Failed to create frontend environment file:", error.message);
-		process.exit(1);
+	if (typeof tradeMoney.addTradeLogic === "function") {
+		const tx = await tradeMoney.addTradeLogic(logicAddress);
+		await tx.wait();
+		console.log(`TradeMoney linked with TradeLogic (${logicAddress})`);
+	} else {
+		console.warn("TradeMoney.addTradeLogic() not found in ABI; skipping logic linkage.");
 	}
+
+	const logicArtifact = await hre.artifacts.readArtifact("TradeLogic");
+	const moneyArtifact = await hre.artifacts.readArtifact("TradeMoney");
+
+	const network = await hre.ethers.provider.getNetwork();
+	const chainId = Number(network.chainId);
+	const runtimeConfig = {
+		dataAddress,
+		logicAddress,
+		moneyAddress,
+		logicAbi: logicArtifact.abi,
+		moneyAbi: moneyArtifact.abi,
+		chainId,
+		rpcUrl: process.env.RPC_URL || hre.network.config.url || "http://127.0.0.1:8545",
+		generatedAt: new Date().toISOString(),
+	};
+
+	const frontendRuntimePath = path.resolve(
+		__dirname,
+		"..",
+		"..",
+		"frontend",
+		"src",
+		"config",
+		"contract-runtime.json",
+	);
+	const backendRuntimePath = path.resolve(
+		__dirname,
+		"..",
+		"..",
+		"backend",
+		"config",
+		"contract-runtime.json",
+	);
+
+	writeJsonFile(frontendRuntimePath, runtimeConfig);
+	writeJsonFile(backendRuntimePath, runtimeConfig);
+
+	console.log(`Frontend runtime config written to ${frontendRuntimePath}`);
+	console.log(`Backend runtime config written to ${backendRuntimePath}`);
 }
 
 main().catch((error) => {
-	console.error(error);
+	console.error("Deployment failed:", error.message || error);
 	process.exitCode = 1;
 });

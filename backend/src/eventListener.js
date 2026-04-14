@@ -9,13 +9,13 @@ function safeStringify(value) {
 	);
 }
 
-function createTradeChainListener({ rpcUrl, contractAddress, abi, pollingInterval = 1000 }) {
+function createTradeChainListener({ rpcUrl, logicAddress, logicAbi, pollingInterval = 1000 }) {
 	const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
 		polling: true,
 		pollingInterval,
 	});
 
-	const contract = new ethers.Contract(contractAddress, abi, provider);
+	const contract = new ethers.Contract(logicAddress, logicAbi, provider);
 	const eventFragments = contract.interface.fragments.filter(
 		(fragment) => fragment.type === "event",
 	);
@@ -27,7 +27,7 @@ function createTradeChainListener({ rpcUrl, contractAddress, abi, pollingInterva
 		const logRecord = {
 			timestamp: new Date().toISOString(),
 			event: eventName,
-			address: contractAddress,
+			address: logicAddress,
 			blockNumber: eventPayload.log.blockNumber,
 			txHash: eventPayload.log.transactionHash,
 			args: values,
@@ -39,8 +39,6 @@ function createTradeChainListener({ rpcUrl, contractAddress, abi, pollingInterva
 	function start() {
 		for (const fragment of eventFragments) {
 			contract.on(fragment.name, async (...args) => {
-				console.log("start, on:");
-				console.log(safeStringify(args));
 				onAnyEvent(fragment.name, ...args);
 
 				const eventPayload = args[args.length - 1];
@@ -53,9 +51,7 @@ function createTradeChainListener({ rpcUrl, contractAddress, abi, pollingInterva
 			console.error("[PROVIDER ERROR]", error.message || error);
 		});
 
-		console.log(
-			`Subscribed to ${eventFragments.length} TradeChain events at ${contractAddress}`,
-		);
+		console.log(`Subscribed to ${eventFragments.length} TradeLogic events at ${logicAddress}`);
 		console.log(`Using RPC ${rpcUrl}`);
 	}
 

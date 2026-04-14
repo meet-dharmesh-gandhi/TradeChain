@@ -36,14 +36,19 @@ function loadConfig() {
 	const runtimeConfig = parseJsonFile(runtimeConfigPath) || {};
 
 	const rpcUrl = process.env.RPC_URL || runtimeConfig.rpcUrl;
-	const contractAddress = process.env.CONTRACT_ADDRESS || runtimeConfig.contractAddress;
+	const logicAddress =
+		process.env.LOGIC_CONTRACT_ADDRESS ||
+		process.env.CONTRACT_ADDRESS ||
+		runtimeConfig.logicAddress ||
+		runtimeConfig.contractAddress;
+	const logicAbi = runtimeConfig.logicAbi || runtimeConfig.abi;
 
 	const config = {
 		port: Number.parseInt(process.env.PORT || "4000", 10),
 		pollingInterval: Number.parseInt(process.env.POLLING_INTERVAL || "1000", 10),
 		rpcUrl,
-		contractAddress,
-		contractAbi: runtimeConfig.abi,
+		logicAddress,
+		logicAbi,
 		runtimeConfigPath,
 		mongoUri: process.env.MONGODB_URI,
 		mongoDbName: process.env.MONGODB_DB_NAME || "tradechain",
@@ -57,19 +62,19 @@ function loadConfig() {
 		);
 	}
 
-	if (!config.contractAddress) {
+	if (!config.logicAddress) {
 		errors.push(
-			"Missing contract address. Set CONTRACT_ADDRESS in backend/.env or deploy contract to generate frontend/.env.local.",
+			"Missing Logic contract address. Set LOGIC_CONTRACT_ADDRESS in backend/.env or run deploy script to generate backend/config/contract-runtime.json.",
 		);
 	}
 
-	if (config.contractAddress && !/^0x[a-fA-F0-9]{40}$/.test(config.contractAddress)) {
-		errors.push(`Invalid contract address format: ${config.contractAddress}`);
+	if (config.logicAddress && !/^0x[a-fA-F0-9]{40}$/.test(config.logicAddress)) {
+		errors.push(`Invalid Logic contract address format: ${config.logicAddress}`);
 	}
 
-	if (!Array.isArray(config.contractAbi) || config.contractAbi.length === 0) {
+	if (!Array.isArray(config.logicAbi) || config.logicAbi.length === 0) {
 		errors.push(
-			`Missing contract ABI. Run deploy script to generate runtime config at ${runtimeConfigPath}.`,
+			`Missing Logic ABI. Run deploy script to generate runtime config at ${runtimeConfigPath}.`,
 		);
 	}
 

@@ -150,8 +150,8 @@ contract TradeData is Ownable {
 
         // create trade
         trades[_trade_id] = Trade(
-            _importer,
             _exporter,
+            _importer,
             address(0),
             address(0),
             address(0),

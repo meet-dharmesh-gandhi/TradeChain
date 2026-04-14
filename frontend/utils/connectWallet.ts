@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { getSafeEnvConfig } from "../config/env";
+import { NETWORK_ID } from "./blockchainDetails";
 
 function isKnownSwitchError(error: unknown): error is { code: number } {
 	if (typeof error !== "object" || error === null) {
@@ -9,19 +9,15 @@ function isKnownSwitchError(error: unknown): error is { code: number } {
 	return "code" in error && typeof (error as { code: unknown }).code === "number";
 }
 
-// Get network configuration from environment
 function getNetworkConfig() {
-	const config = getSafeEnvConfig();
-
-	if (!config.isComplete) {
-		console.warn("Environment config incomplete, using defaults");
-	}
+	const numericChainId = Number(NETWORK_ID());
+	const chainHex = `0x${numericChainId.toString(16)}`;
 
 	return {
-		chainId: config.chainId || "0x7A69",
-		chainName: config.chainName || "Hardhat Local",
-		rpcUrls: [config.rpcUrl || "http://127.0.0.1:8545"],
-		nativeCurrency: config.nativeCurrency || {
+		chainId: chainHex,
+		chainName: process.env.NEXT_PUBLIC_CHAIN_NAME || "Hardhat Local",
+		rpcUrls: [process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545"],
+		nativeCurrency: {
 			name: "Ethereum",
 			symbol: "ETH",
 			decimals: 18,
@@ -31,7 +27,7 @@ function getNetworkConfig() {
 
 export async function connectWallet() {
 	if (typeof window === "undefined" || !window.ethereum || !window.ethereum.isMetaMask) {
-		alert("Please install MetaMask");
+		console.error("MetaMask not detected");
 		return null;
 	}
 
@@ -72,10 +68,7 @@ export async function connectWallet() {
 		const provider = new ethers.BrowserProvider(window.ethereum);
 		const signer = await provider.getSigner();
 		const address = await signer.getAddress();
-
 		console.log("Connected wallet:", address);
-		console.log("Network:", await provider.getNetwork());
-
 		return signer;
 	} catch (error) {
 		console.error("Error connecting wallet:", error);

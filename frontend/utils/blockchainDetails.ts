@@ -1,22 +1,47 @@
 import { ethers } from "ethers";
-import runtimeConfig from "@/config/contract-runtime.json";
+import runtimeConfig from "@/src/config/contract-runtime.json";
 
-export const CONTRACT_ADDRESS = () => runtimeConfig.contractAddress;
-export const NETWORK_ID = () => runtimeConfig.chainId.toString();
+type RuntimeConfig = {
+	logicAddress: string;
+	moneyAddress: string;
+	logicAbi: ethers.InterfaceAbi;
+	moneyAbi: ethers.InterfaceAbi;
+	chainId?: number;
+};
 
-export const TradeChainABI = runtimeConfig.abi;
+const config = runtimeConfig as RuntimeConfig;
 
-export function getContract(signer: ethers.Signer) {
-	const contractAddress = CONTRACT_ADDRESS();
+export const LOGIC_ADDRESS = () => config.logicAddress;
+export const MONEY_ADDRESS = () => config.moneyAddress;
+export const NETWORK_ID = () => String(config.chainId || 31337);
+
+export const TradeLogicABI = config.logicAbi;
+export const TradeMoneyABI = config.moneyAbi;
+
+export function getLogicContract(signer: ethers.Signer) {
+	const contractAddress = LOGIC_ADDRESS();
 	if (!contractAddress) {
-		throw new Error("Contract address not found. Please deploy the contract first.");
+		throw new Error("TradeLogic address not found. Run the deploy script again.");
 	}
 
-	if (!Array.isArray(TradeChainABI) || TradeChainABI.length === 0) {
-		throw new Error("Contract ABI not found. Run deploy script to sync runtime config.");
+	if (!Array.isArray(TradeLogicABI) || TradeLogicABI.length === 0) {
+		throw new Error("TradeLogic ABI missing. Run the deploy script again.");
 	}
 
-	return new ethers.Contract(contractAddress, TradeChainABI, signer);
+	return new ethers.Contract(contractAddress, TradeLogicABI, signer);
+}
+
+export function getMoneyContract(signer: ethers.Signer) {
+	const contractAddress = MONEY_ADDRESS();
+	if (!contractAddress) {
+		throw new Error("TradeMoney address not found. Run the deploy script again.");
+	}
+
+	if (!Array.isArray(TradeMoneyABI) || TradeMoneyABI.length === 0) {
+		throw new Error("TradeMoney ABI missing. Run the deploy script again.");
+	}
+
+	return new ethers.Contract(contractAddress, TradeMoneyABI, signer);
 }
 
 export async function checkNetwork(provider: ethers.Provider) {

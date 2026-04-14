@@ -6,6 +6,7 @@ export type TradeEntity =
 	| "exportCustoms"
 	| "importCustoms"
 	| "shipper"
+	| "arbitrator"
 	| "owner";
 
 export interface TradeRecord {
@@ -15,6 +16,7 @@ export interface TradeRecord {
 	importCustoms: string | null;
 	exportCustoms: string | null;
 	shipper: string | null;
+	arbitrators: string[];
 	agreedAmount: string | null;
 	depositedAmount: string | null;
 	status: string | null;
@@ -33,10 +35,33 @@ interface TradesApiResponse {
 	error?: string;
 }
 
+interface TrustScoreApiResponse {
+	ok: boolean;
+	address?: string;
+	trustScore?: number;
+	error?: string;
+}
+
+interface MarkCompletedApiResponse {
+	ok: boolean;
+	error?: string;
+}
+
+interface MarkCancelledApiResponse {
+	ok: boolean;
+	error?: string;
+}
+
 const inFlightTradeRequests = new Map<string, Promise<TradeRecord[]>>();
 
 function shouldAttachAddress(entity: TradeEntity) {
-	return entity !== "owner" && entity !== "exportCustoms" && entity !== "importCustoms";
+	return (
+		entity !== "owner" &&
+		entity !== "arbitrator" &&
+		entity !== "shipper" &&
+		entity !== "exportCustoms" &&
+		entity !== "importCustoms"
+	);
 }
 
 function getTradesApiUrl(entity: TradeEntity, accountAddress?: string) {
@@ -92,4 +117,73 @@ export async function getTradesForEntity(
 export async function getOngoingTransactions(): Promise<Array<string>> {
 	const trades = await getTradesForEntity("importer");
 	return trades.map((trade) => trade.tradeId);
+}
+
+export async function getTrustScore(address: string): Promise<number> {
+	if (!address) {
+		return 0;
+	}
+
+	const config = getEnvConfig();
+	const url = new URL("/trust-score", config.backendUrl);
+	url.searchParams.set("address", address);
+
+	const response = await fetch(url.toString(), {
+		method: "GET",
+		headers: { Accept: "application/json" },
+		cache: "no-store",
+	});
+
+	const data = (await response.json()) as TrustScoreApiResponse;
+	if (!response.ok || !data.ok) {
+		throw new Error(data.error || "Failed to fetch trust score");
+	}
+
+	return data.trustScore || 0;
+}
+
+export async function markTradeCompleted(tradeId: string, txHash: string): Promise<void> {
+	if (!tradeId) {
+		throw new Error("tradeId is required to mark trade as completed.");
+	}
+
+	const config = getEnvConfig();
+	const url = new URL(`/trades/${tradeId}/complete`, config.backendUrl);
+
+	const response = await fetch(url.toString(), {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Accept: "application/json",
+		},
+		body: JSON.stringify({ txHash }),
+	});
+
+	const data = (await response.json()) as MarkCompletedApiResponse;
+	if (!response.ok || !data.ok) {
+		throw new Error(data.error || "Failed to sync completed trade to backend");
+	}
+}
+
+export async function markTradeCancelled(tradeId: string, txHash: string): Promise<void> {
+	if (!tradeId) {
+		throw new Error("tradeId is required to mark trade as cancelled.");
+	}
+
+	const config = getEnvConfig();
+	const url = new URL(`/trades/${tradeId}/cancel`, config.backendUrl);
+
+	const response = await fetch(url.toString(), {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Accept: "application/json",
+		},
+		body: JSON.stringify({ txHash }),
+	});
+
+	const data = (await response.json()) as MarkCancelledApiResponse;
+	if (!response.ok || !data.ok) {
+		throw new Error(data.error || "Failed to sync cancelled trade to backend");
+	}
 }

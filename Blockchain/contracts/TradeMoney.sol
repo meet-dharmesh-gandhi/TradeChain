@@ -18,6 +18,10 @@ contract TradeMoney is Ownable {
         _;
     }
 
+    function addTradeLogic(address _tradeLogicAddress) external onlyOwner {
+        tradeLogic = _tradeLogicAddress;
+    }
+
     function addMoney(address entity, uint256 amount) external onlyTradeLogic {
         pendingWithdrawals[entity] += amount;
     }

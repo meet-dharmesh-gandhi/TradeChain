@@ -3,19 +3,21 @@ const { loadConfig } = require("./config");
 const { createTradeChainListener } = require("./eventListener");
 const { connectToMongo, disconnectFromMongo } = require("./db");
 const Trade = require("./models/Trade");
+const ParticipantTrust = require("./models/ParticipantTrust");
 
 const config = loadConfig();
 const app = express();
 let listener;
 let server;
 
-const TERMINAL_STATUSES = new Set(["COMPLETED", "DISPUTED"]);
+const TERMINAL_STATUSES = new Set(["COMPLETED", "DISPUTED", "CANCELLED"]);
 const TRADE_ENTITY_FIELDS = {
 	importer: "importer",
 	exporter: "exporter",
 	exportCustoms: "exportCustoms",
 	importCustoms: "importCustoms",
 	shipper: "shipper",
+	arbitrator: null,
 	owner: null,
 };
 
@@ -34,7 +36,12 @@ async function loadTradesForEntity({ entity, address, includeTerminal }) {
 		return trades.sort((a, b) => Number(a.tradeId) - Number(b.tradeId));
 	}
 
-	if (entity === "exportCustoms" || entity === "importCustoms") {
+	if (
+		entity === "exportCustoms" ||
+		entity === "importCustoms" ||
+		entity === "arbitrator" ||
+		entity === "shipper"
+	) {
 		return trades.sort((a, b) => Number(a.tradeId) - Number(b.tradeId));
 	}
 
@@ -60,7 +67,7 @@ async function loadTradesForEntity({ entity, address, includeTerminal }) {
 app.use(express.json());
 app.use((req, res, next) => {
 	res.header("Access-Control-Allow-Origin", "*");
-	res.header("Access-Control-Allow-Methods", "GET,OPTIONS");
+	res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
 	res.header("Access-Control-Allow-Headers", "Content-Type");
 
 	if (req.method === "OPTIONS") {
@@ -82,7 +89,7 @@ app.get("/health", async (_req, res) => {
 		res.json({
 			ok: true,
 			rpcUrl: config.rpcUrl,
-			contractAddress: config.contractAddress,
+			logicAddress: config.logicAddress,
 			mongoDbName: config.mongoDbName,
 			latestBlock: blockNumber,
 		});
@@ -90,6 +97,32 @@ app.get("/health", async (_req, res) => {
 		res.status(500).json({
 			ok: false,
 			error: error instanceof Error ? error.message : "Unknown error",
+		});
+	}
+});
+
+app.get("/trust-score", async (req, res) => {
+	const address = typeof req.query.address === "string" ? req.query.address : "";
+	if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+		res.status(400).json({
+			ok: false,
+			error: "Invalid or missing address query parameter.",
+		});
+		return;
+	}
+
+	try {
+		const normalizedAddress = normalizeAddress(address);
+		const trust = await ParticipantTrust.findOne({ address: normalizedAddress }).lean();
+		res.json({
+			ok: true,
+			address: normalizedAddress,
+			trustScore: trust ? trust.trustScore : 0,
+		});
+	} catch (error) {
+		res.status(500).json({
+			ok: false,
+			error: error instanceof Error ? error.message : "Failed to load trust score",
 		});
 	}
 });
@@ -136,6 +169,68 @@ app.get("/trades/:tradeId", async (req, res) => {
 	}
 });
 
+app.post("/trades/:tradeId/complete", async (req, res) => {
+	const tradeId = req.params.tradeId;
+	const txHash = typeof req.body?.txHash === "string" ? req.body.txHash : null;
+
+	try {
+		const result = await Trade.updateOne(
+			{ tradeId },
+			{
+				$set: {
+					status: "COMPLETED",
+					completedAt: new Date(),
+					lastEventName: "ManualCompleteSync",
+					...(txHash ? { lastTxHash: txHash } : {}),
+				},
+			},
+		);
+
+		if (result.matchedCount === 0) {
+			res.status(404).json({ ok: false, error: "Trade not found" });
+			return;
+		}
+
+		res.json({ ok: true });
+	} catch (error) {
+		res.status(500).json({
+			ok: false,
+			error: error instanceof Error ? error.message : "Failed to mark trade completed",
+		});
+	}
+});
+
+app.post("/trades/:tradeId/cancel", async (req, res) => {
+	const tradeId = req.params.tradeId;
+	const txHash = typeof req.body?.txHash === "string" ? req.body.txHash : null;
+
+	try {
+		const result = await Trade.updateOne(
+			{ tradeId },
+			{
+				$set: {
+					status: "CANCELLED",
+					lastEventName: "ManualCancelSync",
+					disputedBy: null,
+					...(txHash ? { lastTxHash: txHash } : {}),
+				},
+			},
+		);
+
+		if (result.matchedCount === 0) {
+			res.status(404).json({ ok: false, error: "Trade not found" });
+			return;
+		}
+
+		res.json({ ok: true });
+	} catch (error) {
+		res.status(500).json({
+			ok: false,
+			error: error instanceof Error ? error.message : "Failed to mark trade cancelled",
+		});
+	}
+});
+
 async function start() {
 	await connectToMongo({
 		mongoUri: config.mongoUri,
@@ -144,8 +239,8 @@ async function start() {
 
 	listener = createTradeChainListener({
 		rpcUrl: config.rpcUrl,
-		contractAddress: config.contractAddress,
-		abi: config.contractAbi,
+		logicAddress: config.logicAddress,
+		logicAbi: config.logicAbi,
 		pollingInterval: config.pollingInterval,
 	});
 

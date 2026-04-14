@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "hardhat/console.sol";
 
 enum Role {
     NONE,
@@ -178,6 +179,7 @@ contract TradeLogic is Ownable {
         // trade exists check
         Trade memory trade = dataContract.getTrade(_trade_id);
 
+        console.log(msg.sender, trade.exporter);
         // custom checks
         if (msg.sender != trade.exporter)
             revert UnAuthorized("Only the requested exporter can acknowledge");
